@@ -28,7 +28,6 @@ import "C"
 
 import (
 	"errors"
-	"log"
 	"runtime"
 )
 
@@ -55,7 +54,6 @@ func NewModsecurity() (*Modsecurity, error) {
 }
 
 func (m *Modsecurity) SetServerLogCallback(callback func(string)) {
-	log.Print("Registering callback")
 	m.registerServerLogCallback(callback)
 }
 
