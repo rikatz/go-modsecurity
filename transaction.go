@@ -121,6 +121,11 @@ func (txn *transaction) ProcessUri(uri, method, httpVersion string) error {
 
 // With this function it is possible to feed ModSecurity with a request header.
 func (txn *transaction) AddRequestHeader(key, value []byte) error {
+	// Per Modsecurity doc, key and value are NULL ended
+	// Ref: https://github.com/SpiderLabs/ModSecurity/blob/v3.0.4/src/transaction.cc#L2034
+	key = append(key, 0)
+	value = append(value, 0)
+
 	cKey := C.CBytes(key)
 	cValue := C.CBytes(value)
 	txn.deferFree(unsafe.Pointer(cKey), unsafe.Pointer(cValue))
