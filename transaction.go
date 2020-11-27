@@ -35,7 +35,9 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"regexp"
 	"strconv"
+	"strings"
 	"unsafe"
 )
 
@@ -44,8 +46,18 @@ import (
 // An instance of the transaction struct represents
 // an entire request, on its different phases.
 type transaction struct {
-	ruleset *RuleSet
+	// IgnoreRules contains a space-separated list of RulesIDs to be ignored
+	IgnoreRules string
 
+	// TransactionBypassed defines if the current transaction has been bypassed.
+	// If so, no Logging should be processed, unless ForceLog is true
+	TransactionBypassed bool
+
+	// Defines if the Log should be processed even if the Transaction has been
+	// bypassed by ignored rules
+	ForceLog bool
+
+	ruleset     *RuleSet
 	msc_txn     *C.struct_Transaction_t
 	itemsToFree []unsafe.Pointer
 }
@@ -188,6 +200,9 @@ func (txn *transaction) ProcessRequestBody() error {
 // the response can be delivered prior to the execution of
 // this method.
 func (txn *transaction) ProcessLogging() error {
+	if txn.TransactionBypassed {
+		return nil
+	}
 	if C.msc_process_logging(txn.msc_txn) != 1 {
 		return errors.New("Could not Process Logging")
 	}
@@ -200,8 +215,36 @@ func (txn *transaction) ShouldIntervene() bool {
 	if C.msc_intervention(txn.msc_txn, &intervention) == 0 {
 		return false
 	}
-	//fmt.Printf("%v\n", C.GoString(intervention.log))
+
+	// This was the 'better' (but not best) way I've found to ignore rule:
+	// Read the log and see if some rule is being ignored.
+	// I'm not sorry for this, but I have some shame
+	if txn.IgnoreRules != "" {
+		log := C.GoString(intervention.log)
+		r := regexp.MustCompile(`\[id \"(?P<rule>\d*)\"\]`)
+		logRules := r.FindStringSubmatch(log)
+		for _, logRule := range logRules {
+			if txn.ShouldIgnore(logRule) {
+				txn.TransactionBypassed = true
+				return false
+			}
+		}
+	}
+
 	return true
+}
+
+// ShouldIgnore returns true if the Intervention should be ignored
+// It parses the intervention.log and if the field rule matches with
+// something in the IgnoreRules, then return true.
+func (txn *transaction) ShouldIgnore(logRule string) bool {
+	rules := strings.Split(txn.IgnoreRules, " ")
+	for _, rule := range rules {
+		if logRule == rule {
+			return true
+		}
+	}
+	return false
 }
 
 func (txn *transaction) Cleanup() {
