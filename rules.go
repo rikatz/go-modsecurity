@@ -45,6 +45,16 @@ int msc_rules_add_bridge(Rules *rules, const char *plain_rules, char *error) {
     return ret;
 }
 
+int msc_rules_merge_bridge(Rules *dstrules, Rules *srcrules, char *error) {
+	const char *err = NULL;
+	int ret;
+
+	if ((ret = msc_rules_merge(dstrules, srcrules, &err)) < 0) {
+		strncpy(error, err, 1024);
+    }
+    return ret;
+}
+
 */
 import "C"
 import (
@@ -66,6 +76,16 @@ func (m *Modsecurity) NewRuleSet() *RuleSet {
 		modsec:    m,
 		msc_rules: rules,
 	}
+}
+
+func (r *RuleSet) Merge(NewRules *RuleSet) error {
+	err := C.CString(strings.Repeat(string('\x00'), 1024))
+	defer C.free(unsafe.Pointer(err))
+
+	if ret := C.msc_rules_merge_bridge(NewRules.msc_rules, r.msc_rules, err); ret < 0 {
+		return fmt.Errorf("Error loading rules: %s", C.GoString(err))
+	}
+	return nil
 }
 
 func (r *RuleSet) AddFile(path string) error {

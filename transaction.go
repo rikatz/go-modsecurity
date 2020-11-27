@@ -191,10 +191,11 @@ func (txn *transaction) ProcessLogging() error {
 
 func (txn *transaction) ShouldIntervene() bool {
 	intervention := C.struct_ModSecurityIntervention_t{}
+
 	if C.msc_intervention(txn.msc_txn, &intervention) == 0 {
 		return false
 	}
-
+	//fmt.Printf("%v\n", C.GoString(intervention.log))
 	return true
 }
 
