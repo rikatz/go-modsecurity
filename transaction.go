@@ -57,6 +57,9 @@ type transaction struct {
 	// bypassed by ignored rules
 	ForceLog bool
 
+	// BlockedBy is an array of Rules that caused the transaction to be blocked
+	BlockedBy []string
+
 	ruleset     *RuleSet
 	msc_txn     *C.struct_Transaction_t
 	itemsToFree []unsafe.Pointer
@@ -219,15 +222,15 @@ func (txn *transaction) ShouldIntervene() bool {
 	// This was the 'better' (but not best) way I've found to ignore rule:
 	// Read the log and see if some rule is being ignored.
 	// I'm not sorry for this, but I have some shame
-	if txn.IgnoreRules != "" {
-		log := C.GoString(intervention.log)
-		r := regexp.MustCompile(`\[id \"(?P<rule>\d*)\"\]`)
-		logRules := r.FindStringSubmatch(log)
-		for _, logRule := range logRules {
-			if txn.ShouldIgnore(logRule) {
-				txn.TransactionBypassed = true
-				return false
-			}
+	log := C.GoString(intervention.log)
+	r := regexp.MustCompile(`\[id \"(?P<rule>\d*)\"\]`)
+	logRules := r.FindStringSubmatch(log)
+	for _, logRule := range logRules {
+		if txn.IgnoreRules != "" && txn.ShouldIgnore(logRule) {
+			txn.TransactionBypassed = true
+			return false
+		} else {
+			txn.BlockedBy = append(txn.BlockedBy, logRule)
 		}
 	}
 
