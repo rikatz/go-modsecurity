@@ -225,15 +225,13 @@ func (txn *transaction) ShouldIntervene() bool {
 	log := C.GoString(intervention.log)
 	r := regexp.MustCompile(`\[id \"(?P<rule>\d*)\"\]`)
 	logRules := r.FindStringSubmatch(log)
-	for _, logRule := range logRules {
-		if txn.IgnoreRules != "" && txn.ShouldIgnore(logRule) {
+	if len(logRules) == 2 {
+		if txn.IgnoreRules != "" && txn.ShouldIgnore(logRules[1]) {
 			txn.TransactionBypassed = true
 			return false
-		} else {
-			txn.BlockedBy = append(txn.BlockedBy, logRule)
 		}
+		txn.BlockedBy = append(txn.BlockedBy, logRules[1])
 	}
-
 	return true
 }
 
