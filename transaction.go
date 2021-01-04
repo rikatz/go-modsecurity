@@ -65,7 +65,11 @@ type transaction struct {
 	itemsToFree []unsafe.Pointer
 }
 
-// Create a new transaction for a given configuration and ModSecurity core.
+var (
+	regexIgnoreRule = regexp.MustCompile(`\[id \"(?P<rule>\d*)\"\]`)
+)
+
+// NewTransaction Create a new transaction for a given configuration and ModSecurity core.
 //
 // The transaction is the unit that will be used the inspect every request. It holds
 // all the information for a given request.
@@ -141,13 +145,13 @@ func (txn *transaction) AddRequestHeader(key, value []byte) error {
 	key = append(key, 0)
 	value = append(value, 0)
 
-	cKey := C.CBytes(key)
+	/*cKey := C.CBytes(key)
 	cValue := C.CBytes(value)
-	txn.deferFree(unsafe.Pointer(cKey), unsafe.Pointer(cValue))
+	txn.deferFree(unsafe.Pointer(cKey), unsafe.Pointer(cValue))*/
 
 	if C.msc_add_request_header(txn.msc_txn,
-		(*C.uchar)(unsafe.Pointer(cKey)),
-		(*C.uchar)(unsafe.Pointer(cValue))) != 1 {
+		(*C.uchar)(unsafe.Pointer(&key[0])),
+		(*C.uchar)(unsafe.Pointer(&value[0]))) != 1 {
 		return errors.New("Could not add request header")
 	}
 	return nil
@@ -158,6 +162,7 @@ func (txn *transaction) AddRequestHeader(key, value []byte) error {
 //
 // Remember to check for a possible intervention.
 func (txn *transaction) ProcessRequestHeaders() error {
+
 	if C.msc_process_request_headers(txn.msc_txn) != 1 {
 		return errors.New("Could not process request headers")
 	}
@@ -169,12 +174,14 @@ func (txn *transaction) ProcessRequestHeaders() error {
 // With this function it is possible to feed ModSecurity with data for
 // inspection regarding the request body.
 func (txn *transaction) AppendRequestBody(bodyBuf []byte) error {
-	bodyBufC := C.CBytes(append(bodyBuf, '\n'))
-	txn.deferFree(unsafe.Pointer(bodyBufC))
-
+	body := append(bodyBuf, '\n')
+	/*
+		bodyBufC := C.CBytes(append(bodyBuf, '\n'))
+		txn.deferFree(unsafe.Pointer(bodyBufC))
+	*/
 	if 1 != C.msc_append_request_body(txn.msc_txn,
-		(*C.uchar)(unsafe.Pointer(bodyBufC)),
-		(C.size_t)(len(bodyBuf))) {
+		(*C.uchar)(unsafe.Pointer(&body[0])),
+		C.size_t(len(body))) {
 		return errors.New("Could not append Request Body")
 	}
 
@@ -223,8 +230,7 @@ func (txn *transaction) ShouldIntervene() bool {
 	// Read the log and see if some rule is being ignored.
 	// I'm not sorry for this, but I have some shame
 	log := C.GoString(intervention.log)
-	r := regexp.MustCompile(`\[id \"(?P<rule>\d*)\"\]`)
-	logRules := r.FindStringSubmatch(log)
+	logRules := regexIgnoreRule.FindStringSubmatch(log)
 	if len(logRules) == 2 {
 		if txn.IgnoreRules != "" && txn.ShouldIgnore(logRules[1]) {
 			txn.TransactionBypassed = true
